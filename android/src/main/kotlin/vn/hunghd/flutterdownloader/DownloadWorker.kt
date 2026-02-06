@@ -209,6 +209,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
             taskDao = null
             Result.success()
         } catch (e: Exception) {
+            Log.e("DownloadTask", "Error downloading", e)
             updateNotification(applicationContext, filename ?: url, DownloadStatus.FAILED, -1, null, true)
             taskDao?.updateTask(id.toString(), DownloadStatus.FAILED, lastProgress)
             e.printStackTrace()
@@ -260,6 +261,8 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
         timeout: Int
     ) {
         var actualFilename = filename
+        // En el DownloadWorker
+        val customTitle = inputData.getString(ARG_NOTIFICATION_TITLE) ?: filename ?: "Nueva actualización"
         var url = fileURL
         var resourceUrl: URL
         var base: URL?
@@ -416,7 +419,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
                         taskDao!!.updateTask(id.toString(), DownloadStatus.RUNNING, progress)
                         updateNotification(
                             context,
-                            actualFilename,
+                            customTitle,
                             DownloadStatus.RUNNING,
                             progress,
                             null,
@@ -445,11 +448,23 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
                     }
                     if (clickToOpenDownloadedFile) {
                         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && storage != PackageManager.PERMISSION_GRANTED) return
-                        val intent = IntentUtils.validatedFileIntent(
-                            applicationContext,
-                            savedFilePath!!,
-                            contentType
-                        )
+                        log("Acá estamos muchachos $savedFilePath")
+                        val intent = if (savedFilePath!!.endsWith(".vmd", true)) {
+                            // 📦 Tratar como APK
+                            IntentUtils.validatedFileIntent(
+                                applicationContext,
+                                savedFilePath!!,
+                                "application/vnd.android.package-archive"
+                            )
+                        } else {
+                            // 🔹 Comportamiento normal
+                            IntentUtils.validatedFileIntent(
+                                applicationContext,
+                                savedFilePath!!,
+                                contentType
+                            )
+                        }
+                        log("despues")
                         if (intent != null) {
                             log("Setting an intent to open the file $savedFilePath")
                             val flags: Int =
@@ -462,19 +477,31 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
                     }
                 }
                 taskDao!!.updateTask(id.toString(), status, progress)
-                updateNotification(context, actualFilename, status, progress, pendingIntent, true)
+                updateNotification(context, customTitle, status, progress, pendingIntent, true)
                 log(if (isStopped) "Download canceled" else "File downloaded")
             } else {
                 val loadedTask = taskDao!!.loadTask(id.toString())
                 val status =
                     if (isStopped) if (loadedTask!!.resumable) DownloadStatus.PAUSED else DownloadStatus.CANCELED else DownloadStatus.FAILED
                 taskDao!!.updateTask(id.toString(), status, lastProgress)
-                updateNotification(context, actualFilename ?: fileURL, status, -1, null, true)
+                if (status == DownloadStatus.FAILED) {
+                    Log.e(
+                        TAG,
+                        "Download FAILED. Reason: ${
+                            if (isStopped)
+                                "Task was stopped"
+                            else
+                                "Server replied HTTP code: $responseCode"
+                        }"
+                    )
+                }
+                updateNotification(context, customTitle ?: fileURL, status, -1, null, true)
                 log(if (isStopped) "Download canceled" else "Server replied HTTP code: $responseCode")
             }
         } catch (e: IOException) {
+            Log.e("DownloadTask", "Error downloading file: $fileURL", e)
             taskDao!!.updateTask(id.toString(), DownloadStatus.FAILED, lastProgress)
-            updateNotification(context, actualFilename ?: fileURL, DownloadStatus.FAILED, -1, null, true)
+            updateNotification(context, customTitle ?: fileURL, DownloadStatus.FAILED, -1, null, true)
             e.printStackTrace()
         } finally {
             if (outputStream != null) {
@@ -839,6 +866,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
         const val ARG_TIMEOUT = "timeout"
         const val ARG_SHOW_NOTIFICATION = "show_notification"
         const val ARG_OPEN_FILE_FROM_NOTIFICATION = "open_file_from_notification"
+        const val ARG_NOTIFICATION_TITLE = "notification_title"
         const val ARG_CALLBACK_HANDLE = "callback_handle"
         const val ARG_DEBUG = "debug"
         const val ARG_STEP = "step"

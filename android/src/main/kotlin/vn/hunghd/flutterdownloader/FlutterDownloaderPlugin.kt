@@ -1,5 +1,7 @@
 package vn.hunghd.flutterdownloader
 
+import android.os.Build
+import androidx.core.content.FileProvider
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
@@ -92,8 +94,16 @@ class FlutterDownloaderPlugin : MethodChannel.MethodCallHandler, FlutterPlugin {
         requiresStorageNotLow: Boolean,
         saveInPublicStorage: Boolean,
         timeout: Int,
-        allowCellular: Boolean
+        allowCellular: Boolean,
+        notificationTitle: String? = null
     ): WorkRequest {
+        // Detectar si es un archivo .vmd y establecer título personalizado
+        val actualFilename = filename ?: url?.substring(url.lastIndexOf("/") + 1) ?: ""
+        val customNotificationTitle = when {
+            notificationTitle != null -> notificationTitle
+            actualFilename.endsWith(".vmd", ignoreCase = true) -> "Nueva actualización"
+            else -> null // Usar el título por defecto
+        }
         return OneTimeWorkRequest.Builder(DownloadWorker::class.java)
             .setConstraints(
                 Constraints.Builder()
@@ -123,6 +133,8 @@ class FlutterDownloaderPlugin : MethodChannel.MethodCallHandler, FlutterPlugin {
                         DownloadWorker.ARG_SAVE_IN_PUBLIC_STORAGE,
                         saveInPublicStorage
                     )
+                    // Agregar el título personalizado de la notificación
+                    .putString(DownloadWorker.ARG_NOTIFICATION_TITLE, customNotificationTitle)
                     .putInt(DownloadWorker.ARG_TIMEOUT, timeout)
                     .build()
             )
@@ -181,7 +193,8 @@ class FlutterDownloaderPlugin : MethodChannel.MethodCallHandler, FlutterPlugin {
             requiresStorageNotLow,
             saveInPublicStorage,
             timeout,
-            allowCellular = allowCellular
+            allowCellular = allowCellular,
+            notificationTitle = null // Se detectará automáticamente
         )
         WorkManager.getInstance(requireContext()).enqueue(request)
         val taskId: String = request.id.toString()
@@ -285,7 +298,8 @@ class FlutterDownloaderPlugin : MethodChannel.MethodCallHandler, FlutterPlugin {
                         requiresStorageNotLow,
                         task.saveInPublicStorage,
                         timeout,
-                        allowCellular = task.allowCellular
+                        allowCellular = task.allowCellular,
+                        notificationTitle = null // Se detectará automáticamente
                     )
                     val newTaskId: String = request.id.toString()
                     result.success(newTaskId)
@@ -324,7 +338,8 @@ class FlutterDownloaderPlugin : MethodChannel.MethodCallHandler, FlutterPlugin {
                 val request: WorkRequest = buildRequest(
                     task.url, task.savedDir, task.filename,
                     task.headers, task.showNotification, task.openFileFromNotification,
-                    false, requiresStorageNotLow, task.saveInPublicStorage, timeout, allowCellular = task.allowCellular
+                    false, requiresStorageNotLow, task.saveInPublicStorage, timeout, allowCellular = task.allowCellular,
+                    notificationTitle = null // Se detectará automáticamente
                 )
                 val newTaskId: String = request.id.toString()
                 result.success(newTaskId)
@@ -365,13 +380,111 @@ class FlutterDownloaderPlugin : MethodChannel.MethodCallHandler, FlutterPlugin {
             filename = fileURL.substring(fileURL.lastIndexOf("/") + 1, fileURL.length)
         }
         val saveFilePath = savedDir + File.separator + filename
-        val intent: Intent? =
-            IntentUtils.validatedFileIntent(requireContext(), saveFilePath, task.mimeType)
-        if (intent != null) {
-            requireContext().startActivity(intent)
-            result.success(true)
+        Log.i("FlutterDownloader", "Opening file: $filename at path: $saveFilePath")
+
+        val file = File(saveFilePath)
+        if (!file.exists()) {
+            Log.e("FlutterDownloader", "File does not exist at path: $saveFilePath")
+            result.error("file_not_found", "File not found at path: $saveFilePath", null)
+            return
+        }
+
+        val isVmdFile = filename.endsWith(".vmd", ignoreCase = true)
+        Log.i("FlutterDownloader", "Is VMD file: $isVmdFile")
+
+        if (isVmdFile) {
+            // Para archivos VMD, usar método específico de instalación APK
+            val success = openVmdAsApk(saveFilePath, filename)
+            result.success(success)
         } else {
-            result.success(false)
+            // Para otros archivos, usar el método normal
+            val intent: Intent? = IntentUtils.validatedFileIntent(requireContext(), saveFilePath, task.mimeType)
+            if (intent != null) {
+                try {
+                    requireContext().startActivity(intent)
+                    result.success(true)
+                } catch (e: Exception) {
+                    Log.e("FlutterDownloader", "Failed to open file", e)
+                    result.success(false)
+                }
+            } else {
+                result.success(false)
+            }
+        }
+    }
+
+    private fun openVmdAsApk(filePath: String, filename: String): Boolean {
+        return try {
+            val file = File(filePath)
+            Log.i("FlutterDownloader", "Opening VMD file as APK: $filename")
+
+            // Verificar permisos de instalación primero
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!requireContext().packageManager.canRequestPackageInstalls()) {
+                    Log.w("FlutterDownloader", "App doesn't have permission to install packages")
+                    // Opcionalmente redirigir a configuración de permisos
+                    // redirectToInstallPermissionSettings()
+                    return false
+                }
+            }
+
+            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                FileProvider.getUriForFile(
+                    requireContext(),
+                    "${requireContext().packageName}.flutter_downloader.provider",
+                    file
+                )
+            } else {
+                android.net.Uri.fromFile(file)
+            }
+
+            Log.i("FlutterDownloader", "Created URI for VMD: $uri")
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+
+            // Verificar que hay una app que puede manejar la instalación
+            val packageManager = requireContext().packageManager
+            val resolveInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.resolveActivity(intent, android.content.pm.PackageManager.ResolveInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.resolveActivity(intent, 0)
+            }
+
+            if (resolveInfo != null) {
+                Log.i("FlutterDownloader", "Found installer app: ${resolveInfo.activityInfo.packageName}")
+                requireContext().startActivity(intent)
+                Log.i("FlutterDownloader", "APK installer launched successfully")
+                return true
+            } else {
+                Log.e("FlutterDownloader", "No app found to handle APK installation")
+                return false
+            }
+
+        } catch (e: Exception) {
+            Log.e("FlutterDownloader", "Error opening VMD as APK: ${e.message}", e)
+            false
+        }
+    }
+
+    // Método opcional para redirigir a configuración de permisos
+    private fun redirectToInstallPermissionSettings() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = android.net.Uri.parse("package:${requireContext().packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                requireContext().startActivity(intent)
+            }
+        } catch (e: Exception) {
+            Log.e("FlutterDownloader", "Error opening install permission settings", e)
         }
     }
 
