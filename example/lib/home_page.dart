@@ -90,8 +90,9 @@ class _MyHomePageState extends State<MyHomePage> {
   static void downloadCallback(
     String id,
     int status,
-    int progress,
-  ) {
+    int progress, {
+    String? errorMessage,
+  }) {
     print(
       'Callback on background isolate: '
       'task ($id) is in status ($status) and process ($progress)',

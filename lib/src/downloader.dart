@@ -17,8 +17,9 @@ import 'models.dart';
 typedef DownloadCallback = void Function(
   String id,
   int status,
-  int progress,
-);
+  int progress, {
+  String? errorMessage,
+});
 
 /// Provides access to all functions of the plugin in a single place.
 class FlutterDownloader {

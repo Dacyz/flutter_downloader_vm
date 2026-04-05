@@ -18,16 +18,17 @@ void callbackDispatcher() {
       final id = args[1] as String;
       final status = args[2] as int;
       final progress = args[3] as int;
+      final errorMessage = args.length > 4 ? args[4] as String? : null;
 
       final callback = PluginUtilities.getCallbackFromHandle(handle) as void
-          Function(String id, int status, int progress)?;
+          Function(String id, int status, int progress, {String? errorMessage})?;
 
       if (callback == null) {
         // The callback wasn't registered. Ignore.
         return;
       }
 
-      callback(id, status, progress);
+      callback(id, status, progress, errorMessage: errorMessage);
     })
     ..invokeMethod<void>('didInitializeDispatcher');
 }
