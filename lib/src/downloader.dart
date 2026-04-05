@@ -7,7 +7,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_downloader/src/exceptions.dart';
+import 'package:flutter_downloader_vm/src/exceptions.dart';
 
 import 'callback_dispatcher.dart';
 import 'models.dart';

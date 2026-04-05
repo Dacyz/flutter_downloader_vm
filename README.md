@@ -1,8 +1,6 @@
-[![flutter_community][fluttercommunity_badge]][fluttercommunity_link]
+# Flutter Downloader VM
 
-# Flutter Downloader
-
-[![flutter_downloader on pub.dev][pub_badge]][pub_link]
+[![flutter_downloader_vm on pub.dev][pub_badge]][pub_link]
 
 A plugin for creating and managing download tasks. Supports iOS and Android.
 
@@ -276,7 +274,7 @@ See also:
 ### Import and initialize
 
 ```dart
-import 'package:flutter_downloader/flutter_downloader.dart';
+import 'package:flutter_downloader_vm/flutter_downloader_vm.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

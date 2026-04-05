@@ -1,0 +1,6 @@
+# IDE
+example/.idea/
+
+# Android build files
+example/android/gradle/
+example/android/gradlew.bat

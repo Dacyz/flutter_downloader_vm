@@ -1,9 +1,9 @@
-name: flutter_downloader
-description: Powerful plugin making it easy to download files.
-version: 1.12.2
-repository: https://github.com/fluttercommunity/flutter_downloader
-issue_tracker: https://github.com/fluttercommunity/flutter_downloader/issues
-maintainer: Salma (@salmaahhmed)
+name: flutter_downloader_vm
+description: Powerful plugin making it easy to download files with custom notification title.
+version: 0.0.1
+repository: https://github.com/Dacyz/flutter_downloader_vm
+issue_tracker: https://github.com/Dacyz/flutter_downloader_vm/issues
+maintainer: Dacyz (@Dacyz)
 
 flutter:
   plugin:

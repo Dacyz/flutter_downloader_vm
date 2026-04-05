@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:flutter_downloader_example/home_page.dart';
+import 'package:flutter_downloader_vm/flutter_downloader_vm.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
